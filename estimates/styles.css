@@ -1185,3 +1185,84 @@ th {
     font-size: 9pt;
   }
 }
+
+.backup-panel {
+  grid-column: 1 / -1;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--blue-soft);
+}
+
+.backup-panel h3 {
+  margin: 0 0 8px;
+  color: #12395f;
+  font-size: 1rem;
+}
+
+.backup-help {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.restore-file-label {
+  min-width: 260px;
+}
+
+.restore-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 12px 0 0;
+  border: 0;
+  padding: 0;
+}
+
+.restore-mode legend {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.restore-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.restore-mode input {
+  width: auto;
+}
+
+.backup-status,
+.restore-summary {
+  margin: 12px 0 0;
+  border: 1px solid #8ab7da;
+  border-radius: 6px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.pdf-save-status {
+  margin: 4px 0 0;
+  border: 1px solid #8ab7da;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}

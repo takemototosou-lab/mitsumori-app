@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 outputs/
 tmp_pdf_pages/
 .cache/
@@ -14,3 +14,4 @@ tmp_pdf_pages/
 !templates/
 !templates/御見積書_提出用テンプレート.xlsx
 !templates/takemoto-seal.png
+!estimates/index.html

@@ -2,8 +2,10 @@ import { createServer } from "node:http";
 import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { extname, join, normalize } from "node:path";
-import { tmpdir } from "node:os";
+import { extname, join, normalize, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { buildEstimateOutputPlan } from "./server-paths.js";
 
 const root = process.cwd();
 const publicRoot = join(root, "public");
@@ -26,6 +28,10 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && pathname === "/api/estimates/pdf") {
     await handleEstimatePdfRequest(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/open-folder") {
+    await handleOpenFolderRequest(request, response);
     return;
   }
 
@@ -66,7 +72,7 @@ async function handleEstimatePdfRequest(request, response) {
     }
     writeJson(response, 400, { error: "PDF生成用データが空です。" });
   } catch (error) {
-    writeJson(response, 500, { error: error instanceof Error ? error.message : "PDF生成に失敗しました。" });
+    writeJson(response, 500, { error: error instanceof Error ? error.message : "保存先フォルダを開けませんでした。" });
   }
 }
 
@@ -122,6 +128,78 @@ async function handleEstimatePdfHtmlRequest(payload, response) {
   }
 }
 
+async function handleOpenFolderRequest(request, response) {
+  try {
+    const payload = await readJsonBody(request);
+    const folderPath = String(payload.folderPath || "");
+    const desktopPath = await getWindowsDesktopPath();
+    const estimatesRoot = resolve(desktopPath, "見積書");
+    const resolvedFolder = resolve(folderPath);
+    if (!resolvedFolder.startsWith(estimatesRoot)) {
+      writeJson(response, 403, { error: "見積書フォルダ以外は開けません。" });
+      return;
+    }
+    await access(resolvedFolder, constants.R_OK);
+    await openFolder(resolvedFolder);
+    writeJson(response, 200, { ok: true });
+  } catch (error) {
+    writeJson(response, 500, { error: error instanceof Error ? error.message : "保存先フォルダを開けませんでした。" });
+  }
+}
+
+async function buildUniqueEstimateOutputPlan(desktopPath, quote) {
+  const firstPlan = buildEstimateOutputPlan({ desktopPath, quote, existingPaths: new Set() });
+  const existingPaths = new Set();
+  for (let index = 0; index < 100; index += 1) {
+    const plan = buildEstimateOutputPlan({ desktopPath, quote, existingPaths });
+    const pdfExists = await pathExists(plan.pdfPath);
+    const xlsxExists = await pathExists(plan.xlsxPath);
+    if (!pdfExists && !xlsxExists) {
+      return plan;
+    }
+    existingPaths.add(plan.pdfPath);
+    existingPaths.add(plan.xlsxPath);
+  }
+  throw new Error(`保存先ファイル名を決定できませんでした: ${firstPlan.folderPath}`);
+}
+
+async function pathExists(filePath) {
+  try {
+    await access(filePath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getWindowsDesktopPath() {
+  return new Promise((resolveDesktop) => {
+    const child = spawn("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "$desktop = [Environment]::GetFolderPath('Desktop'); if ([string]::IsNullOrWhiteSpace($desktop)) { $desktop = (Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders').Desktop; $desktop = [Environment]::ExpandEnvironmentVariables($desktop) }; $desktop",
+    ]);
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.on("error", () => resolveDesktop(join(homedir(), "Desktop")));
+    child.on("close", () => {
+      const desktop = stdout.trim();
+      resolveDesktop(desktop || join(homedir(), "Desktop"));
+    });
+  });
+}
+
+function openFolder(folderPath) {
+  return new Promise((resolveOpen, reject) => {
+    const child = spawn("explorer.exe", [folderPath], { windowsHide: false });
+    child.on("error", reject);
+    child.on("close", () => resolveOpen());
+  });
+}
 async function handleEstimatePdfDataRequest(payload, response) {
   const outputsDir = join(root, "outputs");
   await mkdir(outputsDir, { recursive: true });
@@ -131,16 +209,20 @@ async function handleEstimatePdfDataRequest(payload, response) {
   const pdfPath = join(outputsDir, pdfName);
   await writeFile(jsonPath, JSON.stringify(payload), "utf8");
   if (payload.pdfEngine === "excel") {
-    const xlsxName = `${baseName}.xlsx`;
-    const xlsxPath = join(outputsDir, xlsxName);
-    const excelResult = await runExcelTemplatePdf(jsonPath, xlsxPath, pdfPath);
+    const desktopPath = await getWindowsDesktopPath();
+    const outputPlan = await buildUniqueEstimateOutputPlan(desktopPath, payload.quote);
+    await mkdir(outputPlan.folderPath, { recursive: true });
+    const excelResult = await runExcelTemplatePdf(jsonPath, outputPlan.xlsxPath, outputPlan.pdfPath);
     writeJson(response, 200, {
-      pdfUrl: `/outputs/${encodeURIComponent(pdfName)}`,
-      xlsxUrl: `/outputs/${encodeURIComponent(xlsxName)}`,
+      pdfUrl: pathToFileURL(outputPlan.pdfPath).href,
+      xlsxUrl: pathToFileURL(outputPlan.xlsxPath).href,
       dataUrl: `/outputs/${encodeURIComponent(`${baseName}.json`)}`,
-      fileName: pdfName,
+      fileName: `${outputPlan.fileBaseName}.pdf`,
       engine: "excel",
       sheetName: excelResult.sheetName,
+      savedFolderPath: outputPlan.folderPath,
+      pdfPath: outputPlan.pdfPath,
+      xlsxPath: outputPlan.xlsxPath,
     });
     return;
   }

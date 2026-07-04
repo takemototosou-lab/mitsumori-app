@@ -18,6 +18,13 @@ import {
   getDefaultContactTitle,
   normalizeQuotePrefix,
 } from "./quote-core.js";
+import {
+  buildBackup,
+  createBackupFileName,
+  parseBackupJson,
+  restoreBackupData,
+  summarizeBackup,
+} from "./quote-backup.js";
 
 const STORAGE_KEY = "takemoto-estimates:v1";
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
@@ -55,6 +62,7 @@ const defaultState = {
 
 let state = loadState();
 let currentQuote = createBlankQuote(generateNextQuoteNumber(state.quotes, new Date(), state.company.quotePrefix));
+let lastSavedFolderPath = "";
 currentQuote.expiryDate = formatDateInput(addDays(new Date(`${currentQuote.issueDate}T00:00:00`), state.company.defaultExpiryDays));
 
 const el = {};
@@ -108,6 +116,8 @@ function bindElements() {
     "duplicateQuoteButton",
     "revisionQuoteButton",
     "printQuoteButton",
+    "openSavedFolderButton",
+    "pdfSaveStatus",
     "statusSelect",
     "historyBody",
     "contactForm",
@@ -123,6 +133,12 @@ function bindElements() {
     "sealPreview",
     "clearLogoButton",
     "clearSealButton",
+    "backupButton",
+    "restoreInput",
+    "restoreModeReplace",
+    "restoreModeAppend",
+    "backupStatus",
+    "restoreSummary",
     "printRoot",
   ].forEach((id) => {
     el[id] = document.getElementById(id);
@@ -139,6 +155,7 @@ function bindEvents() {
   el.duplicateQuoteButton.addEventListener("click", duplicateCurrentQuote);
   el.revisionQuoteButton.addEventListener("click", createRevisionQuote);
   el.printQuoteButton.addEventListener("click", printQuote);
+  el.openSavedFolderButton.addEventListener("click", openSavedFolder);
   el.addItemButton.addEventListener("click", () => {
     currentQuote.items.push(createBlankItem());
     renderItems();
@@ -168,6 +185,8 @@ function bindEvents() {
   el.sealImageInput.addEventListener("change", () => saveCompanyImage("sealImage", el.sealImageInput));
   el.clearLogoButton.addEventListener("click", () => clearCompanyImage("logoImage"));
   el.clearSealButton.addEventListener("click", () => clearCompanyImage("sealImage"));
+  el.backupButton.addEventListener("click", downloadBackup);
+  el.restoreInput.addEventListener("change", restoreBackupFromFile);
 }
 
 function renderAll() {
@@ -636,6 +655,77 @@ function clearCompanyImage(key) {
   state.companyAssets[key] = "";
   saveState();
   renderCompanyImagePreview();
+}
+
+function downloadBackup() {
+  saveCurrentQuote();
+  const backup = buildBackup(state);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = createBackupFileName();
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  const summary = summarizeBackup(backup);
+  showBackupStatus(`バックアップを作成しました。見積 ${summary.quoteCount}件、宛先 ${summary.contactCount}件を保存しました。`);
+}
+
+async function restoreBackupFromFile() {
+  const file = el.restoreInput.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  try {
+    const backup = parseBackupJson(await file.text());
+    const summary = summarizeBackup(backup);
+    el.restoreSummary.hidden = false;
+    el.restoreSummary.textContent = formatBackupSummary(summary);
+    const mode = el.restoreModeAppend.checked ? "append" : "replace";
+    const modeLabel = mode === "append" ? "現在のデータへ追加" : "現在のデータを置き換え";
+    const ok = window.confirm(`${formatBackupSummary(summary)}\n\n復元方式: ${modeLabel}\n\nこの内容で復元しますか？`);
+    if (!ok) {
+      return;
+    }
+    if (mode === "replace") {
+      const replaceOk = window.confirm("現在の見積履歴、宛先、会社情報がバックアップ内容に置き換わります。続けますか？");
+      if (!replaceOk) {
+        return;
+      }
+    }
+    state = restoreBackupData(state, backup, { mode });
+    saveState();
+    startNewQuote();
+    renderAll();
+    showPanel("settings");
+    showBackupStatus(`復元が完了しました。見積 ${state.quotes.length}件、宛先 ${state.contacts.length}件を読み込みました。`);
+  } catch (error) {
+    el.restoreSummary.hidden = false;
+    el.restoreSummary.textContent = error instanceof Error ? error.message : "バックアップを復元できませんでした。";
+    window.alert(el.restoreSummary.textContent);
+  } finally {
+    el.restoreInput.value = "";
+  }
+}
+
+function formatBackupSummary(summary) {
+  return [
+    "バックアップ内容",
+    `作成日時: ${summary.createdAt || "不明"}`,
+    `見積件数: ${summary.quoteCount}件`,
+    `宛先件数: ${summary.contactCount}件`,
+    `会社情報: ${summary.hasCompany ? "あり" : "なし"}`,
+    `ロゴ画像: ${summary.hasLogoImage ? "あり" : "なし"}`,
+    `印鑑画像: ${summary.hasSealImage ? "あり" : "なし"}`,
+  ].join("\n");
+}
+
+function showBackupStatus(message) {
+  el.backupStatus.hidden = false;
+  el.backupStatus.textContent = message;
 }
 
 function renderCompanyImagePreview() {
@@ -1143,6 +1233,7 @@ async function createSubmitPdfFromCurrentPrintDocument() {
     } else {
       window.open(result.pdfUrl, "_blank");
     }
+    showPdfSaveStatus(result);
   } catch (error) {
     window.alert(error instanceof Error ? error.message : "PDF生成に失敗しました。");
   } finally {
@@ -1151,6 +1242,34 @@ async function createSubmitPdfFromCurrentPrintDocument() {
   }
 }
 
+async function openSavedFolder() {
+  if (!lastSavedFolderPath) {
+    return;
+  }
+  try {
+    const response = await fetch("/api/open-folder", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ folderPath: lastSavedFolderPath }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "保存先フォルダを開けませんでした。");
+    }
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "保存先フォルダを開けませんでした。");
+  }
+}
+
+function showPdfSaveStatus(result) {
+  if (!result.savedFolderPath) {
+    return;
+  }
+  lastSavedFolderPath = result.savedFolderPath;
+  el.pdfSaveStatus.hidden = false;
+  el.pdfSaveStatus.textContent = `保存先: ${result.savedFolderPath}`;
+  el.openSavedFolderButton.hidden = false;
+}
 async function postEstimatePdf(payload) {
   const response = await fetch("/api/estimates/pdf", {
     method: "POST",

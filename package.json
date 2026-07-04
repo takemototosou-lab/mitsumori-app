@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "mitsumori-app",
   "version": "0.1.0",
   "private": true,
@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "validate:js": "node --check server.mjs && node --check estimates/app.js && node --check estimates/quote-core.js",
-    "test:estimates": "node --test estimates/*.test.mjs",
+    "validate:js": "node --check server.mjs && node --check server-paths.js && node --check estimates/app.js && node --check estimates/quote-core.js && node --check estimates/quote-backup.js",
+    "test:estimates": "node --test estimates/*.test.mjs server-paths.test.mjs",
     "test": "npm run validate:js && npm run test:estimates"
   }
 }

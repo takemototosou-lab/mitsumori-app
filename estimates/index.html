@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>竹本塗装店 見積書作成</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-layout no-print">
+      <aside class="side-nav">
+        <div>
+          <p class="eyebrow">竹本塗装店</p>
+          <h1>見積書作成</h1>
+        </div>
+        <nav aria-label="メニュー">
+          <button id="navNew" type="button">見積作成</button>
+          <button id="navHistory" type="button">見積履歴</button>
+          <button id="navContacts" type="button">宛先一覧</button>
+          <button id="navSettings" type="button">設定</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <form id="quoteForm" class="quote-grid">
+          <section class="panel project-panel">
+            <div class="panel-title">
+              <h2>見積情報</h2>
+              <select id="statusSelect" aria-label="状態">
+                <option value="draft">作成中</option>
+                <option value="submitted">提出済</option>
+                <option value="ordered">受注</option>
+                <option value="lost">失注</option>
+                <option value="canceled">取消</option>
+              </select>
+            </div>
+            <div class="form-grid">
+              <label><span>宛先区分</span><select id="recipientType"><option value="company">会社</option><option value="person">個人</option></select></label>
+              <label><span>宛名選択</span><select id="recipientSelect"></select></label>
+              <label><span>宛名</span><input id="recipientName" type="text" /></label>
+              <label><span>担当者名</span><input id="contactPerson" type="text" /></label>
+              <label><span>敬称</span><input id="recipientTitle" type="text" /></label>
+              <label><span>郵便番号</span><input id="postalCode" type="text" /></label>
+              <label class="span-2"><span>住所</span><input id="address" type="text" /></label>
+              <label><span>電話番号</span><input id="phone" type="text" /></label>
+              <label class="span-2"><span>件名</span><input id="subject" type="text" /></label>
+              <label><span>現場名</span><input id="siteName" type="text" /></label>
+              <label><span>工期</span><input id="constructionPeriod" type="text" /></label>
+              <label><span>発行日</span><input id="issueDate" type="date" /></label>
+              <label><span>有効期限</span><input id="expiryDate" type="date" /></label>
+              <label><span>見積番号</span><input id="quoteNumber" type="text" /></label>
+            </div>
+            <div class="notes-panel">
+              <label><span>備考</span><textarea id="note"></textarea></label>
+              <label><span>支払条件</span><textarea id="paymentTerms"></textarea></label>
+              <label><span>特記事項・注意事項</span><textarea id="specialNotes"></textarea></label>
+            </div>
+          </section>
+
+          <section class="panel items-panel">
+            <div class="panel-title">
+              <h2>明細入力</h2>
+              <button id="addItemButton" type="button">明細を追加</button>
+            </div>
+            <div class="table-scroll">
+              <table class="items-table">
+                <thead>
+                  <tr>
+                    <th>No.</th>
+                    <th>工事項目</th>
+                    <th>内容・仕様</th>
+                    <th>数量</th>
+                    <th>単位</th>
+                    <th>単価</th>
+                    <th>金額</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="itemsBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="summary-panel">
+            <h2>金額</h2>
+            <label><span>値引き（税抜）</span><input id="discount" type="number" min="0" step="1" /></label>
+            <label><span>端数調整（税込）</span><input id="roundingAdjustment" type="number" min="0" step="1" /></label>
+            <label><span>希望税込着地額（次段階用）</span><input id="desiredTotalWithTax" type="number" min="0" step="1" /></label>
+            <dl class="totals">
+              <div><dt>税抜合計</dt><dd id="subtotalBeforeDiscount">0円</dd></div>
+              <div><dt>値引き</dt><dd id="discountPreview">0円</dd></div>
+              <div><dt>小計</dt><dd id="taxableSubtotal">0円</dd></div>
+              <div><dt>消費税</dt><dd id="tax">0円</dd></div>
+              <div><dt>端数調整</dt><dd id="roundingPreview">0円</dd></div>
+              <div class="grand"><dt>合計（税込）</dt><dd id="totalWithTax">0円</dd></div>
+            </dl>
+            <div class="action-stack">
+              <button id="saveQuoteButton" type="button">保存</button>
+              <button id="printQuoteButton" type="button">PDF出力</button>
+              <button id="newQuoteButton" type="button">新しい見積</button>
+              <button id="duplicateQuoteButton" type="button">この見積を複製</button>
+              <button id="revisionQuoteButton" type="button">修正版として作成</button>
+              <button id="openSavedFolderButton" class="secondary-action" type="button" hidden>保存先フォルダを開く</button>
+              <p id="pdfSaveStatus" class="pdf-save-status" hidden></p>
+            </div>
+          </aside>
+        </form>
+
+        <section id="historyPanel" class="panel" hidden>
+          <h2>見積履歴</h2>
+          <div class="table-scroll">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>作成日</th><th>見積番号</th><th>宛名</th><th>件名</th><th>現場名</th><th>合計（税込）</th><th>状態</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="contactsPanel" class="panel" hidden>
+          <h2>宛先一覧</h2>
+          <div class="contact-tools">
+            <label><span>区分で絞り込み</span><select id="contactFilterType"><option value="all">すべて</option><option value="company">会社</option><option value="person">個人</option></select></label>
+            <label><span>宛名・担当者名で検索</span><input id="contactSearch" type="search" placeholder="例：山田、株式会社" /></label>
+          </div>
+          <form id="contactForm" class="form-grid contact-form">
+            <input name="id" type="hidden" />
+            <label><span>区分</span><select name="type"><option value="company">会社</option><option value="person">個人</option></select></label>
+            <label><span>宛名</span><input name="name" required /></label>
+            <label><span>敬称</span><input name="title" /></label>
+            <label><span>担当者名</span><input name="contactPerson" /></label>
+            <label><span>郵便番号</span><input name="postalCode" /></label>
+            <label><span>住所</span><input name="address" /></label>
+            <label><span>電話番号</span><input name="phone" /></label>
+            <label><span>備考</span><input name="note" /></label>
+            <div class="form-actions">
+              <button id="contactSubmitButton" type="submit">宛先を追加</button>
+              <button id="contactCancelButton" class="secondary-action" type="button" hidden>編集をキャンセル</button>
+            </div>
+          </form>
+          <ul id="contactList" class="contact-list"></ul>
+        </section>
+
+        <section id="settingsPanel" class="panel" hidden>
+          <h2>会社情報</h2>
+          <form id="companyForm" class="form-grid">
+            <label><span>屋号</span><input name="name" /></label>
+            <label><span>代表者名</span><input name="representative" /></label>
+            <label><span>郵便番号</span><input name="postalCode" /></label>
+            <label class="span-2"><span>住所</span><input name="address" /></label>
+            <label><span>電話番号</span><input name="phone" /></label>
+            <label><span>メールアドレス</span><input name="email" type="email" /></label>
+            <label><span>登録番号</span><input name="registrationNumber" /></label>
+            <label class="span-2"><span>振込先</span><input name="bankAccount" /></label>
+            <label><span>既定有効期限（日数）</span><input name="defaultExpiryDays" type="number" min="0" step="1" /></label>
+            <label><span>見積番号の接頭辞</span><input name="quotePrefix" /></label>
+            <label><span>ロゴ画像</span><input id="logoImageInput" name="logoImageFile" type="file" accept="image/*" /></label>
+            <label><span>印鑑画像</span><input id="sealImageInput" name="sealImageFile" type="file" accept="image/*" /></label>
+            <div class="image-preview">
+              <span>ロゴプレビュー</span>
+              <img id="logoPreview" alt="ロゴプレビュー" hidden />
+              <button id="clearLogoButton" class="secondary-action" type="button">ロゴを削除</button>
+            </div>
+            <div class="image-preview">
+              <span>印鑑プレビュー</span>
+              <img id="sealPreview" alt="印鑑プレビュー" hidden />
+              <button id="clearSealButton" class="secondary-action" type="button">印鑑を削除</button>
+            </div>
+          </form>
+          <section class="backup-panel" aria-labelledby="backupTitle">
+            <h3 id="backupTitle">バックアップ／復元</h3>
+            <p class="backup-help">PC移行、故障、ブラウザデータ消去に備えて、見積・宛先・会社情報・画像を1つのJSONファイルに保存します。</p>
+            <div class="backup-actions">
+              <button id="backupButton" type="button">データをバックアップ</button>
+              <label class="restore-file-label">
+                <span>バックアップを復元</span>
+                <input id="restoreInput" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+            <fieldset class="restore-mode">
+              <legend>復元方式</legend>
+              <label><input id="restoreModeReplace" name="restoreMode" type="radio" value="replace" checked /> 現在のデータを置き換える</label>
+              <label><input id="restoreModeAppend" name="restoreMode" type="radio" value="append" /> 現在のデータへ追加する</label>
+            </fieldset>
+            <p id="backupStatus" class="backup-status" hidden></p>
+            <pre id="restoreSummary" class="restore-summary" hidden></pre>
+          </section>        </section>
+      </main>
+    </div>
+
+    <div id="printRoot" class="print-root" aria-label="提出用見積書"></div>
+  </body>
+</html>
