@@ -1,0 +1,13 @@
+﻿{
+  "name": "mitsumori-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "竹本塗装店向け見積書作成アプリ",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "validate:js": "node --check server.mjs && node --check estimates/app.js && node --check estimates/quote-core.js",
+    "test:estimates": "node --test estimates/*.test.mjs",
+    "test": "npm run validate:js && npm run test:estimates"
+  }
+}
