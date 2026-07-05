@@ -1,8 +1,11 @@
 node_modules/
 outputs/
+release/
+dist/
 tmp_pdf_pages/
 .cache/
 .codex-screenshots/
+
 *.log
 *.tmp
 *.pdf
@@ -10,7 +13,13 @@ tmp_pdf_pages/
 *.xlsx
 *.xlsm
 *.png
+*.exe
+*.blockmap
+*.zip
 
+!assets/
+!assets/mitsumori-app-icon.ico
+!assets/mitsumori-app-icon.png
 !templates/
 !templates/御見積書_提出用テンプレート.xlsx
 !templates/takemoto-seal.png

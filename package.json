@@ -2,12 +2,54 @@
   "name": "mitsumori-app",
   "version": "0.1.0",
   "private": true,
-  "description": "竹本塗装店向け見積書作成アプリ",
+  "description": "竹本塗装店向けの見積書作成アプリ",
   "type": "module",
+  "main": "electron/main.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "validate:js": "node --check server.mjs && node --check server-paths.js && node --check estimates/app.js && node --check estimates/quote-core.js && node --check estimates/quote-backup.js",
+    "app:dev": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "validate:js": "node --check server.mjs && node --check server-paths.js && node --check electron/main.mjs && node --check estimates/app.js && node --check estimates/quote-core.js && node --check estimates/quote-backup.js",
     "test:estimates": "node --test estimates/*.test.mjs server-paths.test.mjs",
     "test": "npm run validate:js && npm run test:estimates"
+  },
+  "build": {
+    "appId": "jp.takemototosou.mitsumori",
+    "productName": "竹本塗装店 見積アプリ",
+    "directories": {
+      "output": "release"
+    },
+    "asar": false,
+    "files": [
+      "electron/**",
+      "assets/**",
+      "estimates/**",
+      "scripts/**",
+      "templates/**",
+      "server.mjs",
+      "server-paths.js",
+      "package.json",
+      "README.md",
+      "AGENTS.md",
+      "plan.md"
+    ],
+    "win": {
+      "icon": "assets/mitsumori-app-icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "竹本塗装店 見積アプリ"
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3"
   }
 }

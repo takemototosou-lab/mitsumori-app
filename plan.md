@@ -102,3 +102,54 @@
 
 - `npm.cmd test`: 成功。21件通過。
 - `git diff --check`: 成功。
+
+## 2026-07-05 Windowsアプリ化・インストーラー作成
+
+### 採用方式
+
+- Electronを採用した。
+- 理由は、既存のHTML / CSS / JavaScript資産、`server.mjs`、Excel COM、PowerShell、Pythonスクリプトを最小変更で流用しやすいため。
+- Tauriは配布サイズ面では有利だが、現状のNodeサーバーと既存スクリプト構成を維持するにはElectronの方が安全と判断した。
+
+### 実装内容
+
+- `electron/main.mjs` を追加し、専用Windowsウィンドウで見積アプリを開くようにした。
+- `server.mjs` を、従来の `node server.mjs` 起動とElectron内部起動の両方に対応させた。
+- Electron版は空きポートを自動選択するため、既存の4188番サーバーが動いていても起動しやすい。
+- アプリ名は `竹本塗装店 見積アプリ` にした。
+- `npm.cmd run app:dev` で開発用Windowsアプリ起動、`npm.cmd run dist:win` でNSISインストーラーを生成する構成にした。
+- `release/`、`dist/`、インストーラーexe、blockmapなどの生成物をGit管理対象外にした。
+
+### 生成物
+
+- `release/竹本塗装店 見積アプリ Setup 0.1.0.exe`
+- `release/win-unpacked/竹本塗装店 見積アプリ.exe`
+
+### 確認済み
+
+- `npm.cmd test`: 成功。21件通過。
+- `git diff --check`: 成功。
+- `npm.cmd run dist:win`: 成功。
+- `release/win-unpacked/竹本塗装店 見積アプリ.exe` の起動を確認。
+- Electron内部のローカルPDF APIヘルスチェック `/api/estimates/pdf/health` が `{"ok":true}` を返すことを確認。
+
+### 2026-07-05 実インストール確認
+
+- 受け取った青い見積アプリアイコンを `assets/mitsumori-app-icon.png` と `assets/mitsumori-app-icon.ico` に保存した。
+- Electron Builderの `build.win.icon` へ `assets/mitsumori-app-icon.ico` を指定した。
+- `npm.cmd run dist:win` でアイコン反映済みの `release/竹本塗装店 見積アプリ Setup 0.1.0.exe` を再生成した。
+- 生成済みインストーラーを現在PCへインストールした。
+- インストール先は `C:\Users\takem\AppData\Local\Programs\mitsumori-app`。
+- デスクトップショートカット `C:\Users\takem\OneDrive\Desktop\竹本塗装店 見積アプリ.lnk` を確認した。
+- スタートメニューショートカット `C:\Users\takem\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\竹本塗装店 見積アプリ.lnk` を確認した。
+- 両ショートカットは `竹本塗装店 見積アプリ.exe,0` をアイコンとして参照している。
+- ショートカットからインストール済みアプリを起動し、黒いコマンド画面ではなく専用ウィンドウで開くことを確認した。
+- インストール済みアプリの内部PDF APIから、`C:\Users\takem\OneDrive\Desktop\見積書\法人\インストール確認株式会社\2026` にPDFとxlsxが保存されることを確認した。
+- 保存先フォルダを開くAPIが成功することを確認した。
+- 生成PDFを既定ビューアで開けることを確認した。実プリンターへの印刷送信は行っていない。
+
+### 残る注意点
+
+- 現時点のインストーラーはPythonランタイムを同梱していない。Excelテンプレート流し込みにはPython、`openpyxl`、`Pillow` が必要。
+- PDF化にはMicrosoft Excel COMが必要。Excel未導入PCではPDF出力が動かない可能性がある。
+- `asar: false` でパッケージしている。PythonスクリプトやExcelテンプレートを外部プロセスから参照しやすくするための暫定判断。

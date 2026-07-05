@@ -4,12 +4,12 @@ import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildEstimateOutputPlan } from "./server-paths.js";
 
-const root = process.cwd();
-const publicRoot = join(root, "public");
-const port = Number(process.env.PORT || 4188);
+let root = process.cwd();
+let publicRoot = join(root, "public");
+let port = Number(process.env.PORT || 4188);
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -20,43 +20,59 @@ const types = {
   ".ico": "image/x-icon",
 };
 
-createServer(async (request, response) => {
-  const pathname = decodeURIComponent(new URL(request.url || "/", `http://${request.headers.host}`).pathname);
-  if (request.method === "GET" && pathname === "/api/estimates/pdf/health") {
-    writeJson(response, 200, { ok: true });
-    return;
-  }
-  if (request.method === "POST" && pathname === "/api/estimates/pdf") {
-    await handleEstimatePdfRequest(request, response);
-    return;
-  }
-  if (request.method === "POST" && pathname === "/api/open-folder") {
-    await handleOpenFolderRequest(request, response);
-    return;
-  }
+export function startServer(options = {}) {
+  root = resolve(options.rootDir || process.cwd());
+  publicRoot = join(root, "public");
+  port = Number(options.port ?? process.env.PORT ?? 4188);
 
-  const file = pathname === "/" ? "index.html" : pathname.slice(1);
-  const rootPath = normalize(join(root, file));
-  const publicPath = normalize(join(publicRoot, file));
+  const server = createServer(async (request, response) => {
+    const pathname = decodeURIComponent(new URL(request.url || "/", `http://${request.headers.host}`).pathname);
+    if (request.method === "GET" && pathname === "/api/estimates/pdf/health") {
+      writeJson(response, 200, { ok: true });
+      return;
+    }
+    if (request.method === "POST" && pathname === "/api/estimates/pdf") {
+      await handleEstimatePdfRequest(request, response);
+      return;
+    }
+    if (request.method === "POST" && pathname === "/api/open-folder") {
+      await handleOpenFolderRequest(request, response);
+      return;
+    }
 
-  if (!rootPath.startsWith(root) || !publicPath.startsWith(publicRoot)) {
-    response.writeHead(403);
-    response.end("forbidden");
-    return;
-  }
+    const file = pathname === "/" ? "index.html" : pathname.slice(1);
+    const rootPath = normalize(join(root, file));
+    const publicPath = normalize(join(publicRoot, file));
 
-  try {
-    const body = await readFile(rootPath).catch(() => readFile(publicPath));
-    const extension = extname(rootPath) || extname(publicPath);
-    response.writeHead(200, { "content-type": types[extension] || "text/plain; charset=utf-8" });
-    response.end(body);
-  } catch {
-    response.writeHead(404);
-    response.end("not found");
-  }
-}).listen(port, "127.0.0.1", () => {
-  console.log(`http://127.0.0.1:${port}`);
-});
+    if (!rootPath.startsWith(root) || !publicPath.startsWith(publicRoot)) {
+      response.writeHead(403);
+      response.end("forbidden");
+      return;
+    }
+
+    try {
+      const body = await readFile(rootPath).catch(() => readFile(publicPath));
+      const extension = extname(rootPath) || extname(publicPath);
+      response.writeHead(200, { "content-type": types[extension] || "text/plain; charset=utf-8" });
+      response.end(body);
+    } catch {
+      response.writeHead(404);
+      response.end("not found");
+    }
+  });
+
+  server.listen(port, "127.0.0.1", () => {
+    if (!options.silent) {
+      console.log(`http://127.0.0.1:${port}`);
+    }
+  });
+
+  return server;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  startServer();
+}
 
 async function handleEstimatePdfRequest(request, response) {
   try {
