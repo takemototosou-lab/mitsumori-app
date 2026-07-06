@@ -19,26 +19,20 @@ app.setName(APP_NAME);
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
+} else {
+  app.on("second-instance", () => {
+    showMainWindow();
+  });
+
+  app.whenReady().then(async () => {
+    process.chdir(projectRoot);
+    const legacyState = await readLegacyLocalStorageState(app.getPath("userData"));
+    server = startServer({ rootDir: projectRoot, port: ELECTRON_PORT, silent: true });
+    const actualPort = await waitForServer(server);
+    appUrl = `http://127.0.0.1:${actualPort}`;
+    await createWindow(legacyState);
+  });
 }
-
-app.on("second-instance", () => {
-  if (!mainWindow) {
-    return;
-  }
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow.focus();
-});
-
-app.whenReady().then(async () => {
-  process.chdir(projectRoot);
-  const legacyState = await readLegacyLocalStorageState(app.getPath("userData"));
-  server = startServer({ rootDir: projectRoot, port: ELECTRON_PORT, silent: true });
-  const actualPort = await waitForServer(server);
-  appUrl = `http://127.0.0.1:${actualPort}`;
-  await createWindow(legacyState);
-});
 
 app.on("window-all-closed", () => {
   app.quit();
@@ -80,7 +74,7 @@ async function createWindow(legacyState) {
   });
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    showMainWindow();
   });
 
   await mainWindow.loadURL(`${appUrl}/estimates/index.html`);
@@ -88,6 +82,20 @@ async function createWindow(legacyState) {
   if (migrationResult.migrated) {
     await mainWindow.reload();
   }
+}
+
+function showMainWindow() {
+  if (!mainWindow) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.setSkipTaskbar(false);
+  mainWindow.focus();
 }
 
 function waitForServer(serverInstance) {
