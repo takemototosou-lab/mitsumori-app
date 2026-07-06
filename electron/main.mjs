@@ -1,5 +1,5 @@
 import { app, BrowserWindow, shell } from "electron";
-import { readdir, readFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer } from "../server.mjs";
@@ -27,11 +27,78 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     process.chdir(projectRoot);
     const legacyState = await readLegacyLocalStorageState(app.getPath("userData"));
+    if (legacyState) {
+      await createRescueBackup(app.getPath("userData"));
+    }
     server = startServer({ rootDir: projectRoot, port: ELECTRON_PORT, silent: true });
-    const actualPort = await waitForServer(server);
+    const actualPort = await waitForServer(server).catch((error) => {
+      showStartupError(error);
+      throw error;
+    });
     appUrl = `http://127.0.0.1:${actualPort}`;
     await createWindow(legacyState);
   });
+}
+
+async function createRescueBackup(userDataPath) {
+  const backupRoot = join(app.getPath("desktop"), "見積書", "バックアップ");
+  const backupPath = join(backupRoot, "electron-userData-backup-before-4189-migration");
+  try {
+    await mkdir(backupRoot, { recursive: true });
+    await cp(userDataPath, backupPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      filter: (source) => !source.endsWith("lockfile"),
+    });
+    await writeFile(join(backupPath, "README.txt"), [
+      "竹本塗装店 見積アプリ Electron userData 救出バックアップ",
+      `作成日時: ${new Date().toISOString()}`,
+      "用途: 旧ランダムポート localStorage 救出前の退避",
+      "",
+    ].join("\r\n"), "utf8");
+  } catch (error) {
+    if (error?.code !== "ERR_FS_CP_EEXIST" && error?.code !== "EEXIST") {
+      console.error("Failed to create rescue backup:", error);
+    }
+  }
+}
+
+function showStartupError(error) {
+  const message = error?.code === "EADDRINUSE"
+    ? `見積アプリの固定ポート ${ELECTRON_PORT} がすでに使用されています。\n\n別の見積アプリが起動中の場合は、そちらの画面を開いてください。\n起動中でない場合は、PCを再起動してからもう一度お試しください。`
+    : `見積アプリの起動に失敗しました。\n\n${error?.message || error}`;
+
+  const errorWindow = new BrowserWindow({
+    width: 560,
+    height: 320,
+    title: `${APP_NAME} - 起動エラー`,
+    autoHideMenuBar: true,
+    resizable: false,
+    backgroundColor: "#ffffff",
+  });
+
+  const body = encodeURIComponent(`
+    <!doctype html>
+    <html lang="ja">
+      <meta charset="utf-8" />
+      <title>起動エラー</title>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; color: #17212b;">
+        <h1 style="font-size: 20px; color: #0e4778;">見積アプリを起動できませんでした</h1>
+        <pre style="white-space: pre-wrap; line-height: 1.6; padding: 14px; border: 1px solid #c9d8e6; border-radius: 8px; background: #f4f8fb;">${escapeHtml(message)}</pre>
+      </body>
+    </html>
+  `);
+  errorWindow.loadURL(`data:text/html;charset=utf-8,${body}`);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 app.on("window-all-closed", () => {
